@@ -1,20 +1,23 @@
-const express = require('express');
-const app = express();
-const { stopIdWorker, startIdWorker, getAllWorkerStatus } = require('./src/background/orchestrator');
+const app = require('express')();
+const { json } = require('express');
+const cors = require('cors');
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
 
-const startedServerAt = new Date();
+const { Workers } = require('./src/background/orchestrator');
 
-app.use(express.json());
+app.use(cors());
+app.use(json());
 
 app.post('/background/status', (req, res) => {
-    res.send({ startedServerAt, workers: getAllWorkerStatus() });
+    res.send({ workers: Workers.getAllWorkerStatus() });
 });
 
 app.post('/background/stop', (req, res) => {
 
     const { id } = req.body;
 
-    stopIdWorker(id);
+    Workers.stopIdWorker(id);
 
     res.send({ status: 'ok' });
 });
@@ -23,11 +26,27 @@ app.post('/background/start', (req, res) => {
 
     const { id } = req.body;
 
-    startIdWorker(id);
+    Workers.startIdWorker(id);
 
     res.send({ status: 'ok' });
 });
 
-app.listen(3001, () => {
+io.on("connection", (client) => {
+
+    console.log('Client connected (ID:', client.id, ')');
+
+    client.emit("workersStatus", {
+        workers: Workers.getAllWorkerStatus(),
+    });
+
+    client.on("disconnect", () => {
+        console.log("Client disconnected (ID", client.id, ')');
+    });
+
+});
+
+Workers.setIoInstance(io);
+
+http.listen(3001, () => {
     console.log('Listening on port 3001!');
 });
